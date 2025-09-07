@@ -1,44 +1,3 @@
-<style scoped>
-@import url("~/assets/css/headerfooter.css");
-</style>
-
-<script setup lang="ts">
-const route = useRoute();
-
-const menuToggle = ref(false);
-
-function menuPressed(event) {
-    setTimeout(() => {
-        menuToggle.value = menuToggle.value == false ? true : false;
-    }, 100);
-}
-
-const vw = ref(null);
-const mobile = ref(false);
-
-function widthResized() {
-    vw.value = Math.max(document.documentElement.clientWidth);
-    if (vw.value <= 992) {
-        mobile.value = true;
-    } else {
-        mobile.value = false;
-    }
-}
-
-onMounted(() => {
-    widthResized();
-    var doit;
-    window.onresize = () => {
-      clearTimeout(doit);
-      doit = setTimeout(widthResized, 100);
-    };
-});
-
-onUnmounted(() => {
-    window.onresize = null;
-});
-</script>
-
 <template>
     <div class="landing-page">
         <header class="landing-header">
@@ -56,7 +15,7 @@ onUnmounted(() => {
             </div>
         </header>
         <Transition name="menu">
-            <div  v-if="menuToggle" class="mobile-menu flex-column">
+            <div v-if="menuToggle" class="mobile-menu flex-column">
                 <div class="menu-links flex-column">
                     <NuxtLink @click="menuPressed" to="/">Home</NuxtLink>
                     <div class="sep-line"></div>
@@ -70,7 +29,7 @@ onUnmounted(() => {
                 <p class="credit">Copyright © 2024 ICSM Badminton by <a class="author">Ethan Chang</a> | All Rights Reserved.</p>
             </div>
         </Transition>
-        <div v-show="!menuToggle" class="page-container flex-column">
+        <div class="page-container flex-column">
             <div>
                 <slot />
             </div>
@@ -98,3 +57,45 @@ onUnmounted(() => {
         </div>
     </div>
 </template>
+
+<script setup lang="ts">
+const route = useRoute();
+
+const menuToggle = ref(false);
+
+function menuPressed() {
+    menuToggle.value = !menuToggle.value;
+}
+
+const vw = ref(0);
+const mobile = ref(false);
+
+function widthResized() {
+    vw.value = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+    if (vw.value <= 992) {
+        mobile.value = true;
+    } else {
+        mobile.value = false;
+        menuToggle.value = false; // Close mobile menu when switching to desktop
+    }
+}
+
+onMounted(() => {
+    widthResized();
+    let doit: NodeJS.Timeout;
+    window.onresize = () => {
+        clearTimeout(doit);
+        doit = setTimeout(widthResized, 100);
+    };
+});
+
+onUnmounted(() => {
+    if (typeof window !== 'undefined') {
+        window.onresize = null;
+    }
+});
+</script>
+
+<style scoped>
+@import url("~/assets/css/headerfooter.css");
+</style>

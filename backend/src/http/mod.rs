@@ -16,11 +16,17 @@ pub fn router_app(db: sqlx::PgPool) -> Router {
         .nest("/sessions", sessions::router())
         .layer(from_fn(token::mid_jwt_auth)) // all routes above are protected
         .nest("/users", user_router);
-    Router::new().nest("/api/v1", v1_routes).with_state(db)
+    
+    // Add CORS middleware
+    Router::new()
+        .nest("/api/v1", v1_routes)
+        .layer(tower_http::cors::CorsLayer::permissive())
+        .with_state(db)
 }
 
 pub async fn serve(db: sqlx::PgPool) -> Result<()> {
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8000").await.unwrap();
-    axum::serve(listener, router_app(db)).await;
+    tracing::info!("Server starting on http://0.0.0.0:8000");
+    axum::serve(listener, router_app(db)).await?;
     Ok(())
 }

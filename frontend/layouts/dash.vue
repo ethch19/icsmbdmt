@@ -1,5 +1,6 @@
 <script setup lang="ts">
 const route = useRoute()
+const { logout, user } = useAuth()
 
 const Home = computed(() => {
     return route.path == "/dash" ? true : false;
@@ -9,6 +10,9 @@ const SignUp = computed(() => {
 })
 const Settings = computed(() => {
     return route.path == "/settings" ? true : false;
+})
+const Sessions = computed(() => {
+    return route.path.startsWith("/dash/sessions") ? true : false;
 })
 
 const vw = ref(null);
@@ -23,6 +27,12 @@ function widthResized() {
     } else {
         mobile.value = false;
         LogoutText.value = "Logout";
+    }
+}
+
+const handleLogout = async () => {
+    if (confirm('Are you sure you want to logout?')) {
+        await logout();
     }
 }
 
@@ -51,10 +61,12 @@ onUnmounted(() => {
                 <img class="m-logo" src="/img/icsm-badminton-logo.png" alt="ICSM Badminton Logo">
                 <div class="header-title-container flex-column">
                     <h2 class="subtitle header-subtitle">ICSM Badminton</h2>
-                    <h1 class="title header-heading">Admin Panel</h1>
+                    <h1 class="title header-heading">
+                        {{ user?.admin ? 'Admin Panel' : 'Team Dashboard' }}
+                    </h1>
                 </div>
             </div>
-            <button class="button tertiary-button logout-btn" :class="{ 'logout-mobile-btn': mobile }">{{ LogoutText }}</button>
+            <button @click="handleLogout" class="button tertiary-button logout-btn" :class="{ 'logout-mobile-btn': mobile }">{{ LogoutText }}</button>
         </header>
         <div class="dash-container">
             <div class="sidebar flex-column">
@@ -64,6 +76,12 @@ onUnmounted(() => {
                             <use :href="'/img/home.svg#a'"/>
                         </svg>
                         <span>Home</span>
+                    </NuxtLink>
+                    <NuxtLink :class="{ current: Sessions }" class="sidebar-link tertiary-button button" to="/dash/sessions">
+                        <svg v-if="mobile" :class="{ 'current-svg': Sessions }" class="sidebar-svg">
+                            <use :href="'/img/calendar.svg#a'"/>
+                        </svg>
+                        <span>Sessions</span>
                     </NuxtLink>
                     <NuxtLink :class="{ current: SignUp }" class="sidebar-link tertiary-button button" to="/signup">
                         <svg v-if="mobile" :class="{ 'current-svg': SignUp }" class="sidebar-svg">

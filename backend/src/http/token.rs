@@ -56,7 +56,7 @@ impl AuthBody {
         Self {
             access_token,
             refresh_token,
-            token_type: "Bearer ".to_string(),
+            token_type: "Bearer".to_string(), // Fixed: removed extra space
         }
     }
 }
@@ -90,13 +90,13 @@ impl Keys {
     }
 }
 
-const ACCESS_KEYS: Lazy<Keys> = Lazy::new(|| {
-    let secret = dotenvy::var("ACCESS_JWT_SECRET").expect("JWT_SECRET must be set");
+static ACCESS_KEYS: Lazy<Keys> = Lazy::new(|| {
+    let secret = dotenvy::var("ACCESS_JWT_SECRET").expect("ACCESS_JWT_SECRET must be set");
     Keys::new(secret.as_bytes())
 });
 
-const REFRESH_KEYS: Lazy<Keys> = Lazy::new(|| {
-    let secret = dotenvy::var("REFRESH_JWT_SECRET").expect("JWT_SECRET must be set");
+static REFRESH_KEYS: Lazy<Keys> = Lazy::new(|| {
+    let secret = dotenvy::var("REFRESH_JWT_SECRET").expect("REFRESH_JWT_SECRET must be set");
     Keys::new(secret.as_bytes())
 });
 
@@ -106,7 +106,6 @@ async fn authenticate(
     Json(payload): Json<AuthPayload>,
 ) -> Result<impl IntoResponse> {
     if payload.shortcode.is_empty() || payload.password.is_empty() {
-        error!(
         return Err(Error::from(AuthError::MissingCredentials));
     }
 
@@ -137,7 +136,7 @@ async fn authenticate(
             sub: selected_user.shortcode.clone(),
             exp: expiration as usize,
             user_id: selected_user.id,
-            name: selected_user.first_name + &selected_user.surname,
+            name: format!("{} {}", selected_user.first_name, selected_user.surname), // Fixed concatenation
             tier: selected_user.tier,
             admin: selected_user.admin,
         };
@@ -230,7 +229,7 @@ async fn refresh_token(
                             sub: selected_user.shortcode.clone(),
                             exp: expiration as usize,
                             user_id: selected_user.id,
-                            name: selected_user.first_name + &selected_user.surname,
+                            name: format!("{} {}", selected_user.first_name, selected_user.surname),
                             tier: selected_user.tier,
                             admin: selected_user.admin,
                         };
