@@ -17,6 +17,7 @@ use once_cell::sync::Lazy;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tracing::{error, instrument};
+use sqlx::Row;  // Add this import
 
 use crate::{Error, Result};
 
@@ -56,7 +57,7 @@ impl AuthBody {
         Self {
             access_token,
             refresh_token,
-            token_type: "Bearer".to_string(), // Fixed: removed extra space
+            token_type: "Bearer ".to_string(),
         }
     }
 }
@@ -90,13 +91,13 @@ impl Keys {
     }
 }
 
-static ACCESS_KEYS: Lazy<Keys> = Lazy::new(|| {
-    let secret = dotenvy::var("ACCESS_JWT_SECRET").expect("ACCESS_JWT_SECRET must be set");
+const ACCESS_KEYS: Lazy<Keys> = Lazy::new(|| {
+    let secret = dotenvy::var("ACCESS_JWT_SECRET").expect("JWT_SECRET must be set");
     Keys::new(secret.as_bytes())
 });
 
-static REFRESH_KEYS: Lazy<Keys> = Lazy::new(|| {
-    let secret = dotenvy::var("REFRESH_JWT_SECRET").expect("REFRESH_JWT_SECRET must be set");
+const REFRESH_KEYS: Lazy<Keys> = Lazy::new(|| {
+    let secret = dotenvy::var("REFRESH_JWT_SECRET").expect("JWT_SECRET must be set");
     Keys::new(secret.as_bytes())
 });
 
@@ -109,19 +110,31 @@ async fn authenticate(
         return Err(Error::from(AuthError::MissingCredentials));
     }
 
-    let selected_user = sqlx::query_as!(
-        crate::http::User,
-        r#"
-		SELECT * FROM auth.users WHERE shortcode = $1
-		"#,
-        &payload.shortcode,
+    // Use prepared query instead of macro
+    let user_row = sqlx::query(
+        "SELECT id, first_name, surname, shortcode, cid, password, admin, tier, jti, created_at, last_login FROM auth.users WHERE shortcode = $1"
     )
-    .fetch_one(&pool)
+    .bind(&payload.shortcode)
+    .fetch_optional(&pool)
     .await
     .map_err(|_| AuthError::WrongCredentials)?;
 
+    let user_row = match user_row {
+        Some(row) => row,
+        None => return Err(Error::from(AuthError::WrongCredentials)),
+    };
+
+    // Extract user data from row
+    let user_id: uuid::Uuid = user_row.get("id");
+    let first_name: String = user_row.get("first_name");
+    let surname: String = user_row.get("surname");
+    let shortcode: String = user_row.get("shortcode");
+    let stored_password: String = user_row.get("password");
+    let admin: bool = user_row.get("admin");
+    let tier: i16 = user_row.get("tier");
+
     let parsed_hash =
-        PasswordHash::new(&selected_user.password).map_err(|_| AuthError::WrongCredentials)?;
+        PasswordHash::new(&stored_password).map_err(|_| AuthError::WrongCredentials)?;
 
     if Argon2::default()
         .verify_password(payload.password.as_bytes(), &parsed_hash)
@@ -133,12 +146,12 @@ async fn authenticate(
             .timestamp();
 
         let claims = AccessClaims {
-            sub: selected_user.shortcode.clone(),
+            sub: shortcode.clone(),
             exp: expiration as usize,
-            user_id: selected_user.id,
-            name: format!("{} {}", selected_user.first_name, selected_user.surname), // Fixed concatenation
-            tier: selected_user.tier,
-            admin: selected_user.admin,
+            user_id,
+            name: first_name + &surname,
+            tier,
+            admin,
         };
 
         let access_token = encode(&Header::default(), &claims, &ACCESS_KEYS.encoding)
@@ -151,19 +164,17 @@ async fn authenticate(
                 .timestamp();
 
             let jti = crate::http::defaults::default_uuid();
-            let _ = sqlx::query!(
-                "UPDATE auth.users SET jti = $1 WHERE id = $2",
-                jti,
-                selected_user.id
-            )
-            .execute(&pool)
-            .await
-            .map_err(|_| AuthError::TokenCreation)?;
+            sqlx::query("UPDATE auth.users SET jti = $1 WHERE id = $2")
+                .bind(jti)
+                .bind(user_id)
+                .execute(&pool)
+                .await
+                .map_err(|_| AuthError::TokenCreation)?;
 
             let refresh_claims = RefreshClaims {
-                sub: selected_user.shortcode,
+                sub: shortcode,
                 exp: expiration as usize,
-                user_id: selected_user.id,
+                user_id,
                 jti,
             };
 
@@ -207,31 +218,44 @@ async fn refresh_token(
                     AuthError::InvalidToken
                 })?;
 
-                let selected_user = sqlx::query_as!(
-                    crate::http::User,
-                    "SELECT * FROM auth.users WHERE id = $1",
-                    &token_data.claims.user_id
+                let user_row = sqlx::query(
+                    "SELECT id, first_name, surname, shortcode, cid, password, admin, tier, jti, created_at, last_login FROM auth.users WHERE id = $1"
                 )
-                .fetch_one(&pool)
+                .bind(&token_data.claims.user_id)
+                .fetch_optional(&pool)
                 .await
                 .map_err(|e| {
                     error!(name: "db_error", "Cannot fetch corresponding jti from db: {}", e);
                     AuthError::TokenCreation
                 })?;
-                if let Some(jwt_id) = selected_user.jti {
+
+                let user_row = match user_row {
+                    Some(row) => row,
+                    None => return Err(Error::from(AuthError::TokenCreation)),
+                };
+
+                let stored_jti: Option<uuid::Uuid> = user_row.get("jti");
+                if let Some(jwt_id) = stored_jti {
                     if jwt_id == token_data.claims.jti {
+                        let first_name: String = user_row.get("first_name");
+                        let surname: String = user_row.get("surname");
+                        let shortcode: String = user_row.get("shortcode");
+                        let admin: bool = user_row.get("admin");
+                        let tier: i16 = user_row.get("tier");
+                        let user_id: uuid::Uuid = user_row.get("id");
+
                         let expiration = Utc::now()
                             .checked_add_signed(Duration::hours(1))
                             .expect("valid timestamp")
                             .timestamp();
 
                         let claims = AccessClaims {
-                            sub: selected_user.shortcode.clone(),
+                            sub: shortcode.clone(),
                             exp: expiration as usize,
-                            user_id: selected_user.id,
-                            name: format!("{} {}", selected_user.first_name, selected_user.surname),
-                            tier: selected_user.tier,
-                            admin: selected_user.admin,
+                            user_id,
+                            name: first_name + &surname,
+                            tier,
+                            admin,
                         };
 
                         let access_token =
@@ -247,22 +271,20 @@ async fn refresh_token(
                             .timestamp();
 
                         let jti = crate::http::defaults::default_uuid();
-                        let _ = sqlx::query!(
-                            "UPDATE auth.users SET jti = $1 WHERE id = $2",
-                            jti,
-                            selected_user.id
-                        )
-                        .execute(&pool)
-                        .await
-                        .map_err(|e| {
-                            error!(name: "db_error", "Error when updating jti in db: {}", e);
-                            AuthError::TokenCreation
-                        })?;
+                        sqlx::query("UPDATE auth.users SET jti = $1 WHERE id = $2")
+                            .bind(jti)
+                            .bind(user_id)
+                            .execute(&pool)
+                            .await
+                            .map_err(|e| {
+                                error!(name: "db_error", "Error when updating jti in db: {}", e);
+                                AuthError::TokenCreation
+                            })?;
 
                         let refresh_claims = RefreshClaims {
-                            sub: selected_user.shortcode,
+                            sub: shortcode,
                             exp: expiration as usize,
-                            user_id: selected_user.id,
+                            user_id,
                             jti,
                         };
 
