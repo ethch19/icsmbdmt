@@ -22,7 +22,7 @@ rand = "0.8.5"
 derive_more = { version = "1.0.0", features = ["from"] }
 tracing = "0.1.40"
 jsonwebtoken = "9.3.0"
-tower-http = { version = "0.6.2", features = ["auth"] }
+tower-http = { version = "0.6.2", features = ["cors", "auth"] }
 axum-extra = { version = "0.9.4", features = ["typed-header"] }
 reqwest = { version = "0.12.9", features = ["json"] }
 tracing-subscriber = { version="0.3.19", features = ["chrono"] }

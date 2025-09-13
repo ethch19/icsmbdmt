@@ -17,21 +17,21 @@ export const useAuth = () => {
   const tokens = useState<AuthTokens | null>('auth.tokens', () => null);
   const isLoggedIn = computed(() => !!user.value);
 
-  const login = async (shortcode: string, password: string, keepLogin: boolean = false) => {
+  const login = async (form: {shortcode: string, password: string, keep_login?: boolean}) => {
     try {
       const data = await $fetch<AuthTokens>('/api/v1/users/login', {
         method: 'POST',
-        body: {
-          shortcode,
-          password,
-          keep_login: keepLogin
-        }
+        body: form
       });
 
       tokens.value = data;
       
       // Decode JWT to get user info
-      const payload = JSON.parse(atob(data.access_token.split('.')[1]));
+      const tokenParts = data.access_token.split('.');
+      if (tokenParts.length !== 3) {
+        throw new Error('Invalid token format');
+      }
+      const payload = JSON.parse(atob(tokenParts[1]));
       user.value = {
         id: payload.user_id,
         name: payload.name,
@@ -40,8 +40,8 @@ export const useAuth = () => {
         admin: payload.admin
       };
 
-      // Store tokens in localStorage if keepLogin is true
-      if (keepLogin && data.refresh_token) {
+      // Store tokens in localStorage if keep_login is true
+      if (form.keep_login && data.refresh_token) {
         localStorage.setItem('refresh_token', data.refresh_token);
       }
       localStorage.setItem('access_token', data.access_token);
@@ -84,7 +84,11 @@ export const useAuth = () => {
       }
 
       // Update user info from new token
-      const payload = JSON.parse(atob(data.access_token.split('.')[1]));
+      const tokenParts = data.access_token.split('.');
+      if (tokenParts.length !== 3) {
+        throw new Error('Invalid token format');
+      }
+      const payload = JSON.parse(atob(tokenParts[1]));
       user.value = {
         id: payload.user_id,
         name: payload.name,
@@ -140,7 +144,11 @@ export const useAuth = () => {
     const accessToken = localStorage.getItem('access_token');
     if (accessToken) {
       try {
-        const payload = JSON.parse(atob(accessToken.split('.')[1]));
+        const tokenParts = accessToken.split('.');
+        if (tokenParts.length !== 3) {
+          throw new Error('Invalid token format');
+        }
+        const payload = JSON.parse(atob(tokenParts[1]));
         const isExpired = payload.exp * 1000 < Date.now();
         
         if (isExpired) {
