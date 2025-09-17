@@ -13,13 +13,16 @@ WORKDIR /app
 # Copy ALL source files at once (not in layers)
 COPY backend/ ./
 
+#NOTE: MUST RUN MANUALLY, FOR SOME REASON DOESN'T CREATE THE CORRECT FILES
+
 # Clean any existing build artifacts
-RUN cargo clean
+# RUN cargo clean
 
 # Build the application in one step
-RUN cargo build --release
+# RUN cargo build --release
 
 # Verify the binary exists
+RUN echo "OUTPUT OF BIUILDER STAGE"
 RUN ls -la target/release/backend && file target/release/backend
 
 # Production stage
@@ -36,6 +39,8 @@ WORKDIR /app
 
 # Copy the binary from builder stage
 COPY --from=builder /app/target/release/backend ./backend
+RUN echo "CHECKIMNG BACKEND"
+RUN  ls -l ./backend
 
 # Copy migrations
 COPY backend/migrations ./migrations/
@@ -47,4 +52,6 @@ RUN chmod +x ./backend && ls -la ./backend
 EXPOSE 8000
 
 # Run the application
-CMD ["./backend"]
+CMD ["./target/release/backend"]
+# #CMD ["pwd" && "ls -l"]
+# CMD ["/bin/bash", "-c", "pwd; ls -l;ls -l ./target;ls -l ./target/release"]

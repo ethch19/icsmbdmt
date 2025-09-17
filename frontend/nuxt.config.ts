@@ -15,11 +15,17 @@ export default defineNuxtConfig({
             wasm: true
         },
         devProxy: {
-            '/api/': {
-                target: 'http://localhost:8000',
+            '/api': {
+                target: 'http://localhost:8000/api',
                 changeOrigin: true,
                 prependPath: true
             }
+        }
+    },
+    // Add runtime config for API base URL
+    runtimeConfig: {
+        public: {
+            apiBase: process.env.API_BASE_URL || 'http://localhost:8000'
         }
     }
 })
