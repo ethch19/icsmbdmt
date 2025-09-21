@@ -3,16 +3,16 @@ const route = useRoute()
 const { logout, user } = useAuth()
 
 const Home = computed(() => {
-    return route.path == "/dash" ? true : false;
-})
-const SignUp = computed(() => {
-    return route.path == "/signup" ? true : false;
-})
-const Settings = computed(() => {
-    return route.path == "/settings" ? true : false;
+    return route.path === "/dash" ? true : false;
 })
 const Sessions = computed(() => {
     return route.path.startsWith("/dash/sessions") ? true : false;
+})
+const Responses = computed(() => {
+    return route.path === "/dash/responses" ? true : false;
+})
+const Settings = computed(() => {
+    return route.path === "/dash/settings" ? true : false;
 })
 
 const vw = ref(null);
@@ -50,15 +50,13 @@ onUnmounted(() => {
 });
 </script>
 
-<style scoped>
-@import url("~/assets/css/dash-headerfooter.css");
-</style>
-
 <template>
     <div class="admin-container flex-column">
         <header class="header flex-row">
             <div class="header-container flex-row">
-                <img class="m-logo" src="/img/icsm-badminton-logo.png" alt="ICSM Badminton Logo">
+                <NuxtLink to="/" class="logo-link">
+                    <img class="m-logo" src="/img/icsm-badminton-logo.png" alt="ICSM Badminton Logo">
+                </NuxtLink>
                 <div class="header-title-container flex-column">
                     <h2 class="subtitle header-subtitle">ICSM Badminton</h2>
                     <h1 class="title header-heading">
@@ -66,7 +64,12 @@ onUnmounted(() => {
                     </h1>
                 </div>
             </div>
-            <button @click="handleLogout" class="button tertiary-button logout-btn" :class="{ 'logout-mobile-btn': mobile }">{{ LogoutText }}</button>
+            <div class="header-actions flex-row">
+                <NuxtLink v-if="!mobile" to="/" class="button secondary-button back-to-site-btn">
+                    ← Back to Site
+                </NuxtLink>
+                <button @click="handleLogout" class="button tertiary-button logout-btn" :class="{ 'logout-mobile-btn': mobile }">{{ LogoutText }}</button>
+            </div>
         </header>
         <div class="dash-container">
             <div class="sidebar flex-column">
@@ -83,20 +86,25 @@ onUnmounted(() => {
                         </svg>
                         <span>Sessions</span>
                     </NuxtLink>
-                    <NuxtLink :class="{ current: SignUp }" class="sidebar-link tertiary-button button" to="/signup">
-                        <svg v-if="mobile" :class="{ 'current-svg': SignUp }" class="sidebar-svg">
+                    <NuxtLink :class="{ current: Responses }" class="sidebar-link tertiary-button button" to="/dash/responses">
+                        <svg v-if="mobile" :class="{ 'current-svg': Responses }" class="sidebar-svg">
                             <use :href="'/img/database.svg#a'"/>
                         </svg>
                         <span>Responses</span>
                     </NuxtLink>
-                    <NuxtLink :class="{ current: Settings }" class="sidebar-link tertiary-button button" to="/settings">
+                    <NuxtLink :class="{ current: Settings }" class="sidebar-link tertiary-button button" to="/dash/settings">
                         <svg v-if="mobile" :class="{ 'current-svg': Settings }" class="sidebar-svg">
                             <use :href="'/img/setting.svg#a'"/>
                         </svg>
                         <span>Settings</span>
                     </NuxtLink>
                 </div>
-                <p v-if="!mobile" class="credit">© 2024 ICSM Badminton<br/>By <a class="author">Ethan Chang</a> | All Rights Reserved</p>
+                <div class="sidebar-footer">
+                    <NuxtLink v-if="mobile" to="/" class="mobile-back-to-site">
+                        ← Back to Site
+                    </NuxtLink>
+                    <p v-if="!mobile" class="credit">© 2024 ICSM Badminton<br/>By <a class="author">Ethan Chang</a> | All Rights Reserved</p>
+                </div>
             </div>
             <div class="page-container">
                 <slot/>
@@ -104,3 +112,8 @@ onUnmounted(() => {
         </div>
     </div>
 </template>
+
+<style scoped>
+@import url("~/assets/css/dash-headerfooter.css");
+@import url("~/assets/css/dash-nav.css");
+</style>

@@ -8,6 +8,8 @@
                     <NuxtLink to="/about">About</NuxtLink>
                     <NuxtLink to="/membership">Membership</NuxtLink>
                     <NuxtLink to="/gallery">Gallery</NuxtLink>
+                    <NuxtLink v-if="!isLoggedIn" to="/login" class="auth-link">Login</NuxtLink>
+                    <NuxtLink v-if="isLoggedIn" to="/dash" class="auth-link dashboard-link">Dashboard</NuxtLink>
                 </span>
                 <button v-else class="menu-btn button" @click="menuPressed">
                     <img class="menu-svg" src="/img/menu.svg"/>
@@ -25,8 +27,15 @@
                     <div class="sep-line"></div>
                     <NuxtLink @click="menuPressed" to="/gallery">Gallery</NuxtLink>
                     <div class="sep-line"></div>
+                    <NuxtLink v-if="!isLoggedIn" @click="menuPressed" to="/login" class="mobile-auth-link">Login</NuxtLink>
+                    <NuxtLink v-if="isLoggedIn" @click="menuPressed" to="/dash" class="mobile-auth-link">Dashboard</NuxtLink>
                 </div>
-                <p class="credit">Copyright © 2024 ICSM Badminton by <a class="author">Ethan Chang</a> | All Rights Reserved.</p>
+                <div class="mobile-footer">
+                    <div v-if="isLoggedIn" class="mobile-user-info">
+                        Welcome back, {{ user?.name }}!
+                    </div>
+                    <p class="credit">Copyright © 2024 ICSM Badminton by <a class="author">Ethan Chang</a> | All Rights Reserved.</p>
+                </div>
             </div>
         </Transition>
         <div class="page-container flex-column">
@@ -44,6 +53,8 @@
                                 <li><NuxtLink class="linkbutton" to="/about">About</NuxtLink></li>
                                 <li><NuxtLink class="linkbutton" to="/membership">Membership</NuxtLink></li>
                                 <li><NuxtLink class="linkbutton" to="/gallery">Gallery</NuxtLink></li>
+                                <li v-if="!isLoggedIn"><NuxtLink class="linkbutton" to="/login">Login</NuxtLink></li>
+                                <li v-if="isLoggedIn"><NuxtLink class="linkbutton" to="/dash">Dashboard</NuxtLink></li>
                             </ul>
                         </div>
                         <div class="footer-2-column flex-column">
@@ -60,6 +71,7 @@
 
 <script setup lang="ts">
 const route = useRoute();
+const { isLoggedIn, user } = useAuth();
 
 const menuToggle = ref(false);
 
@@ -76,7 +88,7 @@ function widthResized() {
         mobile.value = true;
     } else {
         mobile.value = false;
-        menuToggle.value = false; // Close mobile menu when switching to desktop
+        menuToggle.value = false;
     }
 }
 
@@ -98,4 +110,5 @@ onUnmounted(() => {
 
 <style scoped>
 @import url("~/assets/css/headerfooter.css");
+@import url("~/assets/css/nav-auth.css");
 </style>

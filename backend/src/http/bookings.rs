@@ -7,7 +7,7 @@ use axum::{
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use uuid::Uuid;
-use sqlx::Row; // Add this import
+use sqlx::Row;
 
 use crate::http::token::AccessClaims;
 use crate::{Error, Result};
@@ -21,11 +21,21 @@ pub struct BookingResponse {
     pub session_start_time: DateTime<Utc>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct BookingUserResponse {
+    pub user_id: Uuid,
+    pub user_name: String,
+    pub shortcode: String,
+    pub tier: i16,
+    pub created_at: DateTime<Utc>,
+}
+
 pub fn router() -> Router<sqlx::PgPool> {
     Router::new()
         .route("/", get(list_user_bookings))
         .route("/sessions/:session_id", post(book_session))
         .route("/sessions/:session_id", delete(cancel_booking))
+        .route("/sessions/:session_id/bookings", get(list_session_bookings)) // NEW
 }
 
 async fn book_session(
@@ -116,6 +126,57 @@ async fn list_user_bookings(
             created_at: row.get("created_at"),
             session_title: row.get("title"),
             session_start_time: row.get("start_time"),
+        }
+    }).collect();
+
+    Ok(Json(bookings))
+}
+
+async fn list_session_bookings(
+    State(pool): State<sqlx::PgPool>,
+    Extension(claims): Extension<AccessClaims>,
+    Path(session_id): Path<Uuid>,
+) -> Result<Json<Vec<BookingUserResponse>>> {
+    // Check if user has permission to view bookings (session author or admin)
+    let session_author = sqlx::query_scalar::<_, Uuid>(
+        "SELECT author_id FROM records.session_forms WHERE id = $1"
+    )
+    .bind(session_id)
+    .fetch_optional(&pool)
+    .await?;
+
+    match session_author {
+        Some(author_id) if author_id != claims.user_id && !claims.admin => {
+            return Err(Error::UnprocessableEntity("Access denied".to_string()));
+        }
+        None => {
+            return Err(Error::UnprocessableEntity("Session not found".to_string()));
+        }
+        _ => {} // User is authorized
+    }
+
+    let rows = sqlx::query(
+        r#"
+        SELECT b.user_id, b.created_at, 
+               u.first_name || ' ' || u.surname as user_name,
+               u.shortcode, u.tier
+        FROM records.bookings b
+        JOIN auth.users u ON b.user_id = u.id
+        WHERE b.form_id = $1
+        ORDER BY b.created_at ASC
+        "#
+    )
+    .bind(session_id)
+    .fetch_all(&pool)
+    .await?;
+
+    let bookings: Vec<BookingUserResponse> = rows.into_iter().map(|row| {
+        BookingUserResponse {
+            user_id: row.get("user_id"),
+            user_name: row.get("user_name"),
+            shortcode: row.get("shortcode"),
+            tier: row.get("tier"),
+            created_at: row.get("created_at"),
         }
     }).collect();
 
