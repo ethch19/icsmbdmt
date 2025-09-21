@@ -1,5 +1,12 @@
+// frontend/middleware/auth.ts - Simplified to prevent infinite redirects
 export default defineNuxtRouteMiddleware((to) => {
-  console.log('🛡️ Secure auth middleware running for:', to.path);
+  console.log('🛡️ Auth middleware running for:', to.path);
+  
+  // Skip middleware for certain paths to prevent infinite loops
+  if (to.path === '/login' || to.path === '/register' || to.path === '/verify' || to.path === '/') {
+    console.log('⏭️ Skipping auth middleware for public path:', to.path);
+    return;
+  }
   
   // For server-side rendering, check cookies
   if (process.server) {
@@ -24,7 +31,9 @@ export default defineNuxtRouteMiddleware((to) => {
       console.log('🔍 Server-side token check:', {
         expires: new Date(payload.exp * 1000),
         isExpired,
-        user: payload.sub
+        user: payload.sub,
+        admin: payload.admin,
+        tier: payload.tier
       });
       
       if (isExpired) {
@@ -69,7 +78,9 @@ export default defineNuxtRouteMiddleware((to) => {
       console.log('🔍 Client-side token check:', {
         expires: new Date(payload.exp * 1000),
         isExpired,
-        user: payload.sub
+        user: payload.sub,
+        admin: payload.admin,
+        tier: payload.tier
       });
       
       if (isExpired) {

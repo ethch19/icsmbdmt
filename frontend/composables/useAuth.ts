@@ -1,3 +1,4 @@
+// frontend/composables/useAuth.ts - Updated with better error handling
 interface User {
   id: string;
   name: string;
@@ -13,9 +14,24 @@ interface AuthTokens {
 }
 
 export const useAuth = () => {
-  const user = useState<User | null>('auth.user', () => null);
-  const tokens = useState<AuthTokens | null>('auth.tokens', () => null);
-  const isLoggedIn = computed(() => !!user.value);
+  console.log('🔧 useAuth composable called');
+  
+  // Initialize state with proper defaults
+  const user = useState<User | null>('auth.user', () => {
+    console.log('🆕 Initializing user state to null');
+    return null;
+  });
+  
+  const tokens = useState<AuthTokens | null>('auth.tokens', () => {
+    console.log('🆕 Initializing tokens state to null');
+    return null;
+  });
+  
+  const isLoggedIn = computed(() => {
+    const loggedIn = !!user.value;
+    console.log('🔍 isLoggedIn computed:', loggedIn, 'user:', user.value?.name);
+    return loggedIn;
+  });
   
   // Use cookies for server-side access
   const accessTokenCookie = useCookie('access_token', {
@@ -23,7 +39,10 @@ export const useAuth = () => {
     httpOnly: false, // Need to access from client-side
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
-    default: () => null
+    default: () => {
+      console.log('🍪 Creating default access token cookie');
+      return null;
+    }
   });
   
   const refreshTokenCookie = useCookie('refresh_token', {
@@ -31,7 +50,10 @@ export const useAuth = () => {
     httpOnly: false,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
-    default: () => null
+    default: () => {
+      console.log('🍪 Creating default refresh token cookie');
+      return null;
+    }
   });
 
   const getApiBase = () => {
@@ -43,9 +65,11 @@ export const useAuth = () => {
 
   const login = async (form: {shortcode: string, password: string, keep_login?: boolean}) => {
     try {
-      console.log('🔑 Starting cookie-based login process...');
+      console.log('🔑 Starting login process for:', form.shortcode);
       
       const baseUrl = getApiBase();
+      console.log('🌐 API Base URL:', baseUrl);
+      
       const data = await $fetch<AuthTokens>(`${baseUrl}/api/v1/users/login`, {
         method: 'POST',
         body: form
@@ -74,54 +98,81 @@ export const useAuth = () => {
       tokens.value = data;
       
       // Decode JWT to get user info
-      const tokenParts = data.access_token.split('.');
-      if (tokenParts.length !== 3) {
-        throw new Error('Invalid token format');
+      try {
+        const tokenParts = data.access_token.split('.');
+        if (tokenParts.length !== 3) {
+          throw new Error('Invalid token format');
+        }
+        
+        const payload = JSON.parse(atob(tokenParts[1]));
+        const userData = {
+          id: payload.user_id,
+          name: payload.name,
+          shortcode: payload.sub,
+          tier: payload.tier,
+          admin: payload.admin
+        };
+        
+        user.value = userData;
+        console.log('👤 User data set:', userData);
+      } catch (tokenError) {
+        console.error('❌ Token decoding error:', tokenError);
+        throw new Error('Invalid token received from server');
       }
-      
-      const payload = JSON.parse(atob(tokenParts[1]));
-      const userData = {
-        id: payload.user_id,
-        name: payload.name,
-        shortcode: payload.sub,
-        tier: payload.tier,
-        admin: payload.admin
-      };
-      
-      user.value = userData;
-      console.log('👤 User data set:', userData);
 
       await nextTick();
-      console.log('🎉 Cookie-based login completed successfully');
+      console.log('🎉 Login completed successfully');
 
       return { success: true };
     } catch (error: any) {
       console.error('❌ Login error:', error);
-      return { success: false, error: error?.data?.message || error?.message || 'Login failed' };
+      
+      // Clear any partial state
+      user.value = null;
+      tokens.value = null;
+      accessTokenCookie.value = null;
+      refreshTokenCookie.value = null;
+      
+      if (process.client) {
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+      }
+      
+      return { 
+        success: false, 
+        error: error?.data?.message || error?.message || 'Login failed' 
+      };
     }
   };
 
   const logout = async () => {
     console.log('👋 Logging out...');
     
-    // Clear cookies
-    accessTokenCookie.value = null;
-    refreshTokenCookie.value = null;
-    console.log('🗑️ Cookies cleared');
-    
-    // Clear localStorage for compatibility
-    if (process.client) {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-      console.log('🗑️ localStorage cleared');
+    try {
+      // Clear cookies
+      accessTokenCookie.value = null;
+      refreshTokenCookie.value = null;
+      console.log('🗑️ Cookies cleared');
+      
+      // Clear localStorage for compatibility
+      if (process.client) {
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        console.log('🗑️ localStorage cleared');
+      }
+      
+      // Clear state
+      user.value = null;
+      tokens.value = null;
+      console.log('🗑️ Auth state cleared');
+      
+      await navigateTo('/');
+    } catch (error) {
+      console.error('❌ Logout error:', error);
+      // Force clear state even if navigation fails
+      user.value = null;
+      tokens.value = null;
     }
-    
-    // Clear state
-    user.value = null;
-    tokens.value = null;
-    console.log('🗑️ Auth state cleared');
-    
-    await navigateTo('/');
   };
 
   const refreshToken = async () => {
@@ -193,102 +244,125 @@ export const useAuth = () => {
     password: string;
   }) => {
     try {
+      console.log('📝 Starting registration for:', userData.shortcode);
+      
       const baseUrl = getApiBase();
       const response = await $fetch(`${baseUrl}/api/v1/users/register`, {
         method: 'POST',
         body: userData
       });
 
+      console.log('✅ Registration successful');
       return { success: true, data: response };
     } catch (error: any) {
-      console.error('Registration error:', error);
-      return { success: false, error: error?.data?.message || error?.message || 'Registration failed' };
+      console.error('❌ Registration error:', error);
+      return { 
+        success: false, 
+        error: error?.data?.message || error?.message || 'Registration failed' 
+      };
     }
   };
 
   const verifyAccount = async (token: string) => {
     try {
+      console.log('🔍 Verifying account with token:', token.substring(0, 8) + '...');
+      
       const baseUrl = getApiBase();
       await $fetch(`${baseUrl}/api/v1/users/verify?token=${token}`, {
         method: 'POST'
       });
+      
+      console.log('✅ Account verification successful');
       return { success: true };
     } catch (error: any) {
-      console.error('Verification error:', error);
-      return { success: false, error: error?.data?.message || error?.message || 'Verification failed' };
+      console.error('❌ Verification error:', error);
+      return { 
+        success: false, 
+        error: error?.data?.message || error?.message || 'Verification failed' 
+      };
     }
   };
 
   // Initialize auth state from cookies (works server-side) or localStorage (fallback)
   const initAuth = async () => {
-    console.log('🔄 Initializing cookie-based auth state...');
+    console.log('🔄 Initializing auth state...');
     
-    // Try cookies first (works on both server and client)
-    let accessToken = accessTokenCookie.value;
-    
-    // Fallback to localStorage (client-side only)
-    if (!accessToken && process.client) {
-      accessToken = localStorage.getItem('access_token');
-      console.log('🔄 Fallback to localStorage token');
-    }
-    
-    console.log('💾 Access token found:', !!accessToken);
-    
-    if (accessToken) {
-      try {
-        const tokenParts = accessToken.split('.');
-        if (tokenParts.length !== 3) {
-          throw new Error('Invalid token format');
-        }
-        
-        const payload = JSON.parse(atob(tokenParts[1]));
-        const isExpired = payload.exp * 1000 < Date.now();
-        
-        console.log('🔓 Token payload:', payload);
-        console.log('⏰ Token expires at:', new Date(payload.exp * 1000));
-        console.log('❓ Token is expired:', isExpired);
-        
-        if (isExpired) {
-          console.log('🔄 Token expired, attempting refresh...');
-          const refreshed = await refreshToken();
-          if (!refreshed) {
-            console.log('❌ Token refresh failed');
-            return;
-          }
-          console.log('✅ Token refreshed successfully');
-        } else {
-          console.log('✅ Token is valid, setting auth state');
-          
-          // Sync cookie with localStorage if needed
-          if (process.client && accessTokenCookie.value && accessToken !== accessTokenCookie.value) {
-            localStorage.setItem('access_token', accessTokenCookie.value);
-          }
-          
-          tokens.value = { access_token: accessToken, token_type: 'Bearer' };
-          const userData = {
-            id: payload.user_id,
-            name: payload.name,
-            shortcode: payload.sub,
-            tier: payload.tier,
-            admin: payload.admin
-          };
-          user.value = userData;
-          console.log('👤 User state set from cookie/token:', userData);
-        }
-      } catch (error) {
-        console.error('❌ Auth initialization error:', error);
-        console.log('🧹 Clearing invalid auth data');
-        await logout();
+    try {
+      // Try cookies first (works on both server and client)
+      let accessToken = accessTokenCookie.value;
+      
+      // Fallback to localStorage (client-side only)
+      if (!accessToken && process.client) {
+        accessToken = localStorage.getItem('access_token');
+        console.log('🔄 Fallback to localStorage token');
       }
-    } else {
-      console.log('ℹ️ No access token found in cookies or localStorage');
+      
+      console.log('💾 Access token found:', !!accessToken);
+      
+      if (accessToken) {
+        try {
+          const tokenParts = accessToken.split('.');
+          if (tokenParts.length !== 3) {
+            throw new Error('Invalid token format');
+          }
+          
+          const payload = JSON.parse(atob(tokenParts[1]));
+          const isExpired = payload.exp * 1000 < Date.now();
+          
+          console.log('🔓 Token payload:', {
+            sub: payload.sub,
+            exp: new Date(payload.exp * 1000),
+            isExpired
+          });
+          
+          if (isExpired) {
+            console.log('🔄 Token expired, attempting refresh...');
+            const refreshed = await refreshToken();
+            if (!refreshed) {
+              console.log('❌ Token refresh failed');
+              return;
+            }
+            console.log('✅ Token refreshed successfully');
+          } else {
+            console.log('✅ Token is valid, setting auth state');
+            
+            // Sync cookie with localStorage if needed
+            if (process.client && accessTokenCookie.value && accessToken !== accessTokenCookie.value) {
+              localStorage.setItem('access_token', accessTokenCookie.value);
+            }
+            
+            tokens.value = { access_token: accessToken, token_type: 'Bearer' };
+            const userData = {
+              id: payload.user_id,
+              name: payload.name,
+              shortcode: payload.sub,
+              tier: payload.tier,
+              admin: payload.admin
+            };
+            user.value = userData;
+            console.log('👤 User state set from token:', userData);
+          }
+        } catch (error) {
+          console.error('❌ Auth initialization error:', error);
+          console.log('🧹 Clearing invalid auth data');
+          await logout();
+        }
+      } else {
+        console.log('ℹ️ No access token found');
+      }
+      
+      console.log('🎯 Auth initialization complete');
+      console.log('📊 Final state - isLoggedIn:', isLoggedIn.value, 'user:', user.value?.name);
+    } catch (error) {
+      console.error('❌ Auth initialization failed:', error);
+      // Ensure clean state on error
+      user.value = null;
+      tokens.value = null;
     }
-    
-    console.log('🎯 Cookie-based auth initialization complete');
-    console.log('📊 Final state - isLoggedIn:', isLoggedIn.value, 'user:', user.value?.name);
   };
 
-  return {
+  // Return all functions and state
+  const authState = {
     user: readonly(user),
     tokens: readonly(tokens),
     isLoggedIn,
@@ -299,4 +373,8 @@ export const useAuth = () => {
     refreshToken,
     initAuth
   };
+
+  console.log('🔧 useAuth composable returning:', Object.keys(authState));
+  
+  return authState;
 };

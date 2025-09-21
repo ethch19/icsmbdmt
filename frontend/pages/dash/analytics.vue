@@ -2,7 +2,7 @@
 <script setup lang="ts">
 definePageMeta({
     layout: "dash",
-    middleware: ["auth", "admin"],
+    middleware: ["auth", "admin", "dashboard-redirect"],
 });
 
 const { getSessions } = useSessions();

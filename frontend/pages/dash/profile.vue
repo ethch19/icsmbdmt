@@ -2,7 +2,7 @@
 <script setup lang="ts">
 definePageMeta({
     layout: "dash",
-    middleware: ["auth"],
+    middleware: ["auth", "dashboard-redirect"],
 });
 
 const { user, logout } = useAuth();
